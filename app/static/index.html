@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FuckinDownloader</title>
+  <meta name="description" content="Just fucking download it. No ads, no subscriptions, no waiting.">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="brand">
+    <h1 class="logo" id="logo">Fuckin<span>Downloader</span></h1>
+    <p class="tag" id="tagline"><b>Just fucking download it.</b> No ads. No subscriptions. No waiting.</p>
+  </header>
+
+  <div id="closed" class="box hidden" style="text-align:center">The public downloader is switched off right now.</div>
+
+  <main id="app">
+    <div id="keybox" class="box hidden" style="margin-bottom:12px">
+      <div class="lbl">Access key</div>
+      <div class="urlrow" style="margin-top:6px">
+        <input id="key" type="password" placeholder="This instance wants an access key" autocomplete="off">
+        <button class="btn" id="saveKey">Save</button>
+      </div>
+    </div>
+
+    <form class="box" id="form" autocomplete="off">
+      <div class="urlrow">
+        <input id="url" type="url" inputmode="url" placeholder="Paste a link. Any link. YouTube, Spotify, TikTok, Insta, Reddit..." required>
+        <button type="button" class="btn" id="paste" title="Paste from clipboard">Paste</button>
+      </div>
+
+      <div class="modes" id="modes">
+        <button type="button" class="mode" data-mode="video">MP4<small>video</small></button>
+        <button type="button" class="mode" data-mode="audio">MP3<small>audio</small></button>
+        <button type="button" class="mode" data-mode="image">Images<small>posts / stories</small></button>
+        <button type="button" class="mode" data-mode="original">Original<small>no re-encode</small></button>
+        <button type="button" class="mode" data-mode="thumbnail">Cover<small>thumbnail only</small></button>
+      </div>
+
+      <div class="row" id="videoOpts">
+        <label class="field"><span>Quality</span>
+          <select id="video_quality">
+            <option value="best">Best available</option>
+            <option value="4320">8K (4320p)</option>
+            <option value="2160">4K (2160p)</option>
+            <option value="1440">1440p</option>
+            <option value="1080">1080p</option>
+            <option value="720">720p</option>
+            <option value="480">480p</option>
+            <option value="360">360p</option>
+            <option value="240">240p</option>
+          </select>
+        </label>
+        <label class="field"><span>Container</span>
+          <select id="video_container">
+            <option value="mp4">MP4</option>
+            <option value="mkv">MKV</option>
+            <option value="webm">WEBM</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row hidden" id="audioOpts">
+        <label class="field"><span>Format</span>
+          <select id="audio_format">
+            <option value="mp3">MP3</option>
+            <option value="m4a">M4A (AAC)</option>
+            <option value="opus">OPUS</option>
+            <option value="ogg">OGG</option>
+            <option value="flac">FLAC</option>
+            <option value="wav">WAV</option>
+          </select>
+        </label>
+        <label class="field"><span>Bitrate</span>
+          <select id="audio_quality">
+            <option value="best">Best (VBR)</option>
+            <option value="320">320 kbps</option>
+            <option value="256">256 kbps</option>
+            <option value="192">192 kbps</option>
+            <option value="128">128 kbps</option>
+            <option value="96">96 kbps</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="preview"></div>
+
+      <details id="adv">
+        <summary>More options</summary>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="playlist"> Whole playlist / album / channel / profile</label>
+        </div>
+        <div class="row">
+          <label class="field"><span>Only these items (e.g. 1-10,15)</span>
+            <input class="input" id="playlist_items" placeholder="all">
+          </label>
+          <label class="field"><span>Video codec</span>
+            <select id="video_codec">
+              <option value="compat">H.264 (plays everywhere)</option>
+              <option value="best">Best (VP9 / AV1)</option>
+            </select>
+          </label>
+          <label class="field"><span>Engine</span>
+            <select id="engine">
+              <option value="auto">Auto (recommended)</option>
+              <option value="ytdlp">yt-dlp</option>
+              <option value="gallerydl">gallery-dl</option>
+              <option value="spotdl">spotdl</option>
+              <option value="match">Music matcher</option>
+              <option value="sniff">Page sniffer</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="subtitles"> Embed subtitles</label>
+          <label class="check"><input type="checkbox" id="sponsorblock"> Cut sponsors &amp; intros (SponsorBlock)</label>
+          <label class="check"><input type="checkbox" id="autosave" checked> Auto-save when done</label>
+        </div>
+      </details>
+
+      <button class="btn primary go" id="go" type="submit">Just fucking download it</button>
+      <div class="err hidden" id="formErr"></div>
+    </form>
+
+    <h2><span>Your downloads</span><button class="btn small" id="clearDone" type="button">Clear finished</button></h2>
+    <div id="jobs"><div class="empty">Nothing yet. Paste something above.</div></div>
+
+    <div class="sites">
+      <span>YouTube</span><span>YT Music</span><span>Spotify</span><span>SoundCloud</span><span>Deezer</span>
+      <span>Apple Music</span><span>TikTok</span><span>Instagram</span><span>Reddit</span><span>X / Twitter</span>
+      <span>Facebook</span><span>Twitch</span><span>Vimeo</span><span>Bilibili</span><span>Pinterest</span>
+      <span>Threads</span><span>Bluesky</span><span>Dailymotion</span><span>Bandcamp</span><span>PH &amp; friends</span>
+      <span>+1800 more</span>
+    </div>
+  </main>
+
+  <footer>
+    Self-hosted, open source. Powered by yt-dlp, gallery-dl, spotdl &amp; ffmpeg.
+    Download stuff you have the right to download.
+  </footer>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

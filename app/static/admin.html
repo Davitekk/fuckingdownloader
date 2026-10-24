@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>FuckinDownloader admin</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap wide">
+  <div class="topbar">
+    <h1 class="logo">Fuckin<span>Admin</span></h1>
+    <div class="row" style="margin:0">
+      <a class="btn" href="/" target="_blank">Open downloader</a>
+      <button class="btn primary" id="save">Save settings</button>
+      <form method="post" id="logout" style="margin:0"><button class="btn">Log out</button></form>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-tab="general">General</button>
+    <button class="tab" data-tab="cookies">Cookies</button>
+    <button class="tab" data-tab="engines">Engines</button>
+    <button class="tab" data-tab="jobs">Downloads</button>
+    <button class="tab" data-tab="system">System</button>
+  </div>
+
+  <!-- GENERAL -->
+  <section class="panel on" id="p-general">
+    <div class="box section">
+      <h3>Public page</h3>
+      <p>Anyone with the URL can use the downloader. Lock it with an access key if randoms start hammering it.</p>
+      <div class="row">
+        <label class="check"><input type="checkbox" data-k="public_enabled"> Public downloader enabled</label>
+      </div>
+      <div class="grid" style="margin-top:12px">
+        <label class="field"><span>Site title</span><input class="input" data-k="site_title"></label>
+        <label class="field"><span>Tagline</span><input class="input" data-k="tagline"></label>
+        <label class="field"><span>Access key (empty = open)</span><input class="input" data-k="public_password" type="password" autocomplete="new-password"></label>
+      </div>
+    </div>
+    <div class="box section">
+      <h3>Limits</h3>
+      <p>Keep your server alive. 0 = unlimited where it makes sense.</p>
+      <div class="grid">
+        <label class="field"><span>Parallel downloads</span><input class="input" type="number" min="1" data-k="max_concurrent"></label>
+        <label class="field"><span>Active downloads per IP</span><input class="input" type="number" min="0" data-k="max_jobs_per_ip"></label>
+        <label class="field"><span>Keep files for (hours)</span><input class="input" type="number" min="0.1" step="0.5" data-k="retention_hours"></label>
+        <label class="field"><span>Max file size (MB)</span><input class="input" type="number" min="0" data-k="max_filesize_mb"></label>
+        <label class="field"><span>Max playlist items</span><input class="input" type="number" min="0" data-k="max_playlist_items"></label>
+      </div>
+    </div>
+    <div class="box section">
+      <h3>Network</h3>
+      <p>Proxy applies to every engine (http://, https://, socks5://). The PO token provider helps YouTube stop calling you a bot.</p>
+      <div class="grid">
+        <label class="field"><span>Proxy</span><input class="input" data-k="proxy" placeholder="socks5://user:pass@host:1080"></label>
+        <label class="field"><span>YouTube PO token provider</span><input class="input" data-k="pot_provider_url" placeholder="http://bgutil:4416"></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" data-k="allow_private_urls"> Allow private/LAN URLs for everyone (SSRF risk, leave off on public instances)</label>
+      </div>
+    </div>
+    <div class="box section">
+      <h3>Defaults for new visitors</h3>
+      <div class="grid">
+        <label class="field"><span>Mode</span>
+          <select data-k="defaults.mode"><option value="video">Video</option><option value="audio">Audio</option><option value="image">Images</option><option value="original">Original</option></select></label>
+        <label class="field"><span>Video quality</span>
+          <select data-k="defaults.video_quality"><option>best</option><option>2160</option><option>1440</option><option>1080</option><option>720</option><option>480</option><option>360</option></select></label>
+        <label class="field"><span>Video container</span>
+          <select data-k="defaults.video_container"><option>mp4</option><option>mkv</option><option>webm</option></select></label>
+        <label class="field"><span>Audio format</span>
+          <select data-k="defaults.audio_format"><option>mp3</option><option>m4a</option><option>opus</option><option>ogg</option><option>flac</option><option>wav</option></select></label>
+        <label class="field"><span>Audio bitrate</span>
+          <select data-k="defaults.audio_quality"><option>best</option><option>320</option><option>256</option><option>192</option><option>128</option></select></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- COOKIES -->
+  <section class="panel" id="p-cookies">
+    <div class="box section">
+      <h3>Cookies</h3>
+      <p>
+        Needed for Instagram stories/private stuff, age-restricted YouTube, YouTube "sign in to confirm you're not a bot",
+        private Reddit, members-only content, etc. Export them from a logged-in browser with an extension like
+        <b>Get cookies.txt LOCALLY</b> (Netscape format) or <b>Cookie-Editor</b> (JSON works too), then paste or upload below.
+        Tip: use a throwaway account. For YouTube, export from a private window you then close, so the cookies don't get rotated.
+      </p>
+    </div>
+    <div id="cookieSlots"></div>
+  </section>
+
+  <!-- ENGINES -->
+  <section class="panel" id="p-engines">
+    <div class="box section">
+      <h3>Spotify (spotdl)</h3>
+      <p>spotdl's built-in API keys are shared by everyone and get rate-limited constantly. Make your own app at
+        <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com</a> (free) and paste the keys here.
+        Without keys, Spotify links fall back to the built-in matcher.</p>
+      <div class="grid">
+        <label class="field"><span>Client ID</span><input class="input" data-k="spotify.client_id" autocomplete="off"></label>
+        <label class="field"><span>Client secret</span><input class="input" data-k="spotify.client_secret" type="password" autocomplete="new-password"></label>
+      </div>
+    </div>
+    <div class="box section">
+      <h3>Extra arguments</h3>
+      <p>Appended to every command. Power-user stuff, you can break things here.</p>
+      <div class="grid">
+        <label class="field"><span>yt-dlp</span><input class="input" data-k="ytdlp_extra_args" placeholder="--limit-rate 10M"></label>
+        <label class="field"><span>gallery-dl</span><input class="input" data-k="gallerydl_extra_args" placeholder="-o sleep-request=2"></label>
+        <label class="field"><span>spotdl</span><input class="input" data-k="spotdl_extra_args" placeholder="--audio youtube-music youtube"></label>
+      </div>
+    </div>
+    <div class="box section">
+      <h3>Custom engines</h3>
+      <p>
+        Plug in any CLI downloader installed in the container. If the URL matches the regex, your command runs first.
+        Placeholders: <code>{url}</code> <code>{outdir}</code> <code>{tmpdir}</code> <code>{cookies}</code> <code>{proxy}</code>
+        <code>{mode}</code> <code>{audio_format}</code> <code>{quality}</code>. Files must end up in <code>{outdir}</code>.
+        No shell: pipes and <code>&amp;&amp;</code> won't work, wrap them in a script.
+      </p>
+      <div id="customEngines"></div>
+      <button class="btn small" id="addEngine">+ Add engine</button>
+    </div>
+  </section>
+
+  <!-- JOBS -->
+  <section class="panel" id="p-jobs">
+    <div class="box section">
+      <div class="topbar" style="margin:0 0 10px">
+        <h3 style="margin:0">All downloads</h3>
+        <div class="row" style="margin:0">
+          <button class="btn small" id="refreshJobs">Refresh</button>
+          <button class="btn small danger" id="clearJobs">Delete finished</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto"><table id="jobTable"></table></div>
+    </div>
+  </section>
+
+  <!-- SYSTEM -->
+  <section class="panel" id="p-system">
+    <div class="box section">
+      <h3>Versions</h3>
+      <div class="kv" id="versions">Loading...</div>
+    </div>
+    <div class="box section">
+      <h3>Update engines</h3>
+      <p>Sites change constantly; yt-dlp ships fixes almost daily. If something suddenly breaks, update first.
+        Updates last until the container is recreated (set <code>AUTO_UPDATE=true</code> to update on every start).</p>
+      <div class="row">
+        <button class="btn primary" id="update">Update yt-dlp, gallery-dl &amp; spotdl</button>
+        <label class="check"><input type="checkbox" id="nightly"> Use yt-dlp nightly / pre-release</label>
+      </div>
+      <pre class="log hidden" id="updateLog"></pre>
+    </div>
+    <div class="box section">
+      <h3>Storage</h3>
+      <div class="kv" id="disk"></div>
+    </div>
+  </section>
+</div>
+<div class="toast hidden" id="toast"></div>
+<script src="/static/admin.js"></script>
+</body>
+</html>

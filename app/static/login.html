@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin login</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <form class="box login" method="post" id="f">
+    <h1 class="logo" style="font-size:30px;margin-bottom:6px">Fuckin<span>Admin</span></h1>
+    <p class="sub" style="margin-top:0">Only the boss gets in here.</p>
+    <input class="input" type="password" name="password" placeholder="Password" autofocus required autocomplete="current-password">
+    <button class="btn primary go" type="submit">Let me in</button>
+    <div class="err hidden" id="bad">Nope. Wrong password.</div>
+  </form>
+</div>
+<script>
+  document.getElementById("f").action = location.pathname.replace(/\/$/, "") + "/login";
+  if (location.search.includes("bad=1")) document.getElementById("bad").classList.remove("hidden");
+</script>
+</body>
+</html>

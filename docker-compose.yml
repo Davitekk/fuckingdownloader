@@ -1,0 +1,23 @@
+services:
+  fuckindownloader:
+    build: .
+    image: fuckindownloader:local
+    container_name: fuckindownloader
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      POT_PROVIDER_URL: http://bgutil:4416
+    volumes:
+      - ./data:/data
+    depends_on:
+      - bgutil
+
+  # Generates YouTube PO tokens so YouTube is less likely to block your server IP.
+  # Optional: remove this service and POT_PROVIDER_URL above if you don't want it.
+  bgutil:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: fuckindownloader-pot
+    restart: unless-stopped
+    init: true

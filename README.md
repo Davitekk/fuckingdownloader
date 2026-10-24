@@ -50,8 +50,8 @@ curl -fsSL https://get.docker.com | sh
 Get the code and configure it:
 
 ```bash
-git clone https://github.com/<your-user>/FuckinDownloader.git
-cd FuckinDownloader
+git clone https://github.com/Davitekk/fuckingdownloader.git
+cd fuckingdownloader
 cp .env.example .env
 nano .env   # set ADMIN_PASSWORD at least, and ideally a weird ADMIN_PATH
 ```

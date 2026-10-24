@@ -39,4 +39,4 @@ $env:FDL_SPOTDL_PIP = "$PSScriptRoot\.venv-spotdl\Scripts\pip.exe"
 $admin = if ($env:ADMIN_PATH) { $env:ADMIN_PATH.Trim("/") } else { "admin" }
 Write-Host ">> FuckinDownloader:  http://localhost:$Port" -ForegroundColor Green
 Write-Host ">> Admin panel:       http://localhost:$Port/$admin  (password = ADMIN_PASSWORD in .env)" -ForegroundColor Green
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port $Port
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port $Port --no-access-log

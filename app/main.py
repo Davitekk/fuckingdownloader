@@ -2,6 +2,8 @@
 import asyncio
 import hmac
 import os
+import re
+import secrets
 import shutil
 import sys
 import time
@@ -22,6 +24,7 @@ from .jobs import EngineError, manager
 from .netguard import BlockedURL, check_url
 
 STATIC = Path(__file__).parent / "static"
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
 VERSION = "1.0.0"
 
 
@@ -35,8 +38,26 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="FuckinDownloader", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=secret_key(), session_cookie="fdl_admin",
                    max_age=7 * 24 * 3600, same_site="lax",
-                   https_only=os.environ.get("COOKIE_SECURE", "false").lower() in ("1", "true", "yes"))
+                   https_only=COOKIE_SECURE)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+OWNER_COOKIE = "fdl_owner"
+OWNER_RE = re.compile(r"^[A-Za-z0-9_-]{32}$")
+
+
+@app.middleware("http")
+async def owner_cookie(req: Request, call_next):
+    """Every browser gets a random id; downloads are only visible to the browser that made them."""
+    owner = req.cookies.get(OWNER_COOKIE, "")
+    fresh = not OWNER_RE.match(owner)
+    if fresh:
+        owner = secrets.token_urlsafe(24)
+    req.state.owner = owner
+    resp = await call_next(req)
+    if fresh:
+        # session cookie: gone when the browser session ends, like the downloads themselves
+        resp.set_cookie(OWNER_COOKIE, owner, httponly=True, samesite="lax", secure=COOKIE_SECURE, path="/")
+    return resp
 
 
 # --- helpers -------------------------------------------------------------
@@ -181,6 +202,7 @@ async def public_config(req: Request):
         "title": cfg["site_title"], "tagline": cfg["tagline"], "defaults": cfg["defaults"],
         "public_enabled": cfg["public_enabled"], "access_key_required": bool(cfg["public_password"]),
         "is_admin": is_admin(req), "max_playlist_items": cfg["max_playlist_items"], "version": VERSION,
+        "default_theme": cfg.get("default_theme", "blue"), "file_expiry_minutes": cfg.get("file_expiry_minutes", 10),
         "custom_engines": [e["name"] for e in cfg.get("custom_engines") or [] if e.get("enabled", True)]
         if is_admin(req) else [],
     }
@@ -217,43 +239,55 @@ async def api_create_job(body: JobIn, req: Request):
         return _err(e)
     if not admin and manager.active_for_ip(ip) >= int(cfg.get("max_jobs_per_ip") or 3):
         return _err(Exception("Chill, you already have downloads running. Wait for them to finish."), 429)
-    job = manager.submit(url, _clean_opts(body.options, admin), ip)
+    job = manager.submit(url, _clean_opts(body.options, admin), ip, req.state.owner)
     return job.public()
 
 
-def _get_job(job_id: str):
+def _get_job(job_id: str, req: Request | None = None):
+    """Look up a job; with a request, only its owner (or an admin) gets to see it."""
     job = manager.jobs.get(job_id)
-    if not job:
+    if not job or (req is not None and job.owner != req.state.owner and not is_admin(req)):
         raise HTTPException(404, "That download doesn't exist (anymore).")
     return job
 
 
+FINISHED = ("done", "error", "cancelled")
+
+
 @app.get("/api/jobs")
-async def api_jobs(ids: str = ""):
-    # job ids are unguessable, knowing one is the access token
-    out = []
-    for jid in ids.split(",")[:100]:
-        job = manager.jobs.get(jid.strip())
-        if job:
-            out.append(job.public())
-    return out
+async def api_jobs(req: Request):
+    return [j.public() for j in manager.for_owner(req.state.owner)]
+
+
+@app.post("/api/jobs/clear")
+async def api_clear(req: Request):
+    for job in manager.for_owner(req.state.owner):
+        if job.status in FINISHED:
+            manager.delete(job)
+    return {"ok": True}
 
 
 @app.get("/api/jobs/{job_id}")
-async def api_job(job_id: str):
-    return _get_job(job_id).public()
+async def api_job(job_id: str, req: Request):
+    return _get_job(job_id, req).public()
 
 
 @app.post("/api/jobs/{job_id}/cancel")
-async def api_cancel(job_id: str):
-    job = _get_job(job_id)
+async def api_cancel(job_id: str, req: Request):
+    job = _get_job(job_id, req)
     manager.cancel(job)
     return job.public()
 
 
+@app.delete("/api/jobs/{job_id}")
+async def api_delete(job_id: str, req: Request):
+    manager.delete(_get_job(job_id, req))
+    return {"ok": True}
+
+
 @app.get("/api/jobs/{job_id}/file")
-async def api_file(job_id: str):
-    job = _get_job(job_id)
+async def api_file(job_id: str, req: Request):
+    job = _get_job(job_id, req)
     if job.status != "done" or not job.files:
         raise HTTPException(409, "Not ready yet.")
     if job.archive:
@@ -266,8 +300,8 @@ async def api_file(job_id: str):
 
 
 @app.get("/api/jobs/{job_id}/files/{idx}")
-async def api_file_n(job_id: str, idx: int):
-    job = _get_job(job_id)
+async def api_file_n(job_id: str, idx: int, req: Request):
+    job = _get_job(job_id, req)
     if job.status != "done" or not (0 <= idx < len(job.files)):
         raise HTTPException(404, "No such file.")
     p = (job.outdir / job.files[idx][0]).resolve()
@@ -301,8 +335,10 @@ async def admin_put_settings(req: Request):
             patch[k] = max(0, int(patch[k] or 0))
     if "max_concurrent" in patch:
         patch["max_concurrent"] = max(1, patch["max_concurrent"])
-    if "retention_hours" in patch:
-        patch["retention_hours"] = max(0.1, float(patch["retention_hours"] or 6))
+    if "file_expiry_minutes" in patch:
+        patch["file_expiry_minutes"] = min(max(1.0, float(patch["file_expiry_minutes"] or 10)), 60 * 24 * 7)
+    if patch.get("default_theme") not in (None, "blue", "green", "red"):
+        patch["default_theme"] = "blue"
     if "custom_engines" in patch:
         patch["custom_engines"] = [
             {"name": str(e.get("name", "")).strip()[:40], "pattern": str(e.get("pattern", "")),

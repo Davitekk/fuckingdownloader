@@ -9,8 +9,8 @@
   let mode = "video";
   let analyzeSeq = 0;
   let lastInfo = null;
-  let jobIds = store.get("jobs", []);
-  const saved = new Set(store.get("saved", []));
+  const saved = new Set();
+  const hints = {}; // title/thumbnail from the preview, shown until the job reports its own
   const jobsEl = $("#jobs");
 
   const fields = ["video_quality", "video_container", "video_codec", "audio_format", "audio_quality", "engine"];
@@ -145,15 +145,11 @@
     btn.disabled = true;
     try {
       const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({ url, options: options() }) });
-      if (lastInfo && !job.title) { job.title = lastInfo.title; job.thumbnail = lastInfo.thumbnail; }
-      jobIds = [job.id, ...jobIds.filter((x) => x !== job.id)].slice(0, 50);
-      store.set("jobs", jobIds);
-      jobCache[job.id] = { ...job, _hintTitle: lastInfo?.title, _hintThumb: lastInfo?.thumbnail };
-      store.set("hints", { ...store.get("hints", {}), [job.id]: { t: lastInfo?.title, th: lastInfo?.thumbnail } });
+      if (lastInfo) hints[job.id] = { t: lastInfo.title, th: lastInfo.thumbnail };
+      prevStatus[job.id] = job.status;
       $("#url").value = "";
       $("#preview").innerHTML = "";
       lastInfo = null;
-      render();
       poll();
     } catch (e) {
       err.textContent = e.message;
@@ -164,13 +160,16 @@
   });
 
   // --- jobs ---------------------------------------------------------------
-  const jobCache = {};
+  // The server only returns jobs made from this browser (fdl_owner cookie).
+  let jobList = [];
+  const prevStatus = {};
+  const deadlines = {}; // job id -> local-clock expiry time, immune to server/client clock skew
+  const openDetails = new Set();
   let pollTimer = null;
 
   function autoSave(job) {
     if (saved.has(job.id) || !$("#autosave").checked) return;
     saved.add(job.id);
-    store.set("saved", [...saved].slice(-100));
     const a = document.createElement("a");
     a.href = `/api/jobs/${job.id}/file`;
     a.download = "";
@@ -179,10 +178,25 @@
     a.remove();
   }
 
+  function expiryText(id) {
+    const left = (deadlines[id] - Date.now()) / 1000;
+    return left > 0 ? `Deletes in ${fmtTime(left)}` : "Expired";
+  }
+
+  function tickExpiry() {
+    document.querySelectorAll("[data-exp]").forEach((el) => {
+      const id = el.dataset.exp;
+      if (!deadlines[id]) return;
+      el.textContent = expiryText(id);
+      el.classList.toggle("soon", deadlines[id] - Date.now() < 60000);
+    });
+  }
+  setInterval(tickExpiry, 1000);
+
   function render() {
-    const hints = store.get("hints", {});
-    const list = jobIds.map((id) => jobCache[id]).filter(Boolean);
+    const list = jobList;
     if (!list.length) { jobsEl.innerHTML = `<div class="empty">Nothing yet. Paste something above.</div>`; return; }
+    jobsEl.querySelectorAll("details[data-id]").forEach((d) => (d.open ? openDetails.add(d.dataset.id) : openDetails.delete(d.dataset.id)));
     jobsEl.innerHTML = list.map((j) => {
       const title = j.title || hints[j.id]?.t || j.url;
       const thumb = j.thumbnail || hints[j.id]?.th;
@@ -194,6 +208,7 @@
       if (j.downloaded && j.total && j.status === "running") bits.push(`${fmtBytes(j.downloaded)} / ${fmtBytes(j.total)}`);
       if (j.speed) bits.push(`${fmtBytes(j.speed)}/s`);
       if (j.eta) bits.push(`ETA ${fmtTime(j.eta)}`);
+      if (j.status === "done" && deadlines[j.id]) bits.push(`<span class="expiry" data-exp="${j.id}">${expiryText(j.id)}</span>`);
       const size = (j.files || []).reduce((a, f) => a + (f.size || 0), 0);
       let actions = "";
       if (j.status === "done") {
@@ -201,9 +216,9 @@
       }
       if (active) actions += `<button class="btn small danger" data-cancel="${j.id}">Cancel</button>`;
       if (j.status === "error") actions += `<button class="btn small" data-retry="${j.id}">Retry</button>`;
-      actions += `<button class="btn small" data-remove="${j.id}">Remove</button>`;
+      actions += `<button class="btn small" data-remove="${j.id}">${j.status === "done" ? "Delete now" : "Remove"}</button>`;
       const files = j.status === "done" && j.files.length > 1
-        ? `<details><summary>${j.files.length} files</summary><ul class="files">${j.files.map((f, i) => `<li><a href="/api/jobs/${j.id}/files/${i}" download>${esc(f.path)}</a> <span class="sub">${fmtBytes(f.size)}</span></li>`).join("")}</ul></details>`
+        ? `<details data-id="${j.id}" ${openDetails.has(j.id) ? "open" : ""}><summary>${j.files.length} files</summary><ul class="files">${j.files.map((f, i) => `<li><a href="/api/jobs/${j.id}/files/${i}" download>${esc(f.path)}</a> <span class="sub">${fmtBytes(f.size)}</span></li>`).join("")}</ul></details>`
         : "";
       return `
         <div class="box job ${j.status}">
@@ -221,52 +236,54 @@
           </div>
         </div>`;
     }).join("");
+    tickExpiry();
   }
 
   jobsEl.addEventListener("click", async (ev) => {
     const t = ev.target.closest("[data-cancel],[data-remove],[data-retry]");
     if (!t) return;
-    if (t.dataset.cancel) {
-      try { jobCache[t.dataset.cancel] = await api(`/api/jobs/${t.dataset.cancel}/cancel`, { method: "POST" }); } catch {}
-    } else if (t.dataset.remove) {
-      const id = t.dataset.remove;
-      const j = jobCache[id];
-      if (j && ["queued", "running", "processing"].includes(j.status)) { try { await api(`/api/jobs/${id}/cancel`, { method: "POST" }); } catch {} }
-      jobIds = jobIds.filter((x) => x !== id);
-      store.set("jobs", jobIds);
-      delete jobCache[id];
-    } else if (t.dataset.retry) {
-      const j = jobCache[t.dataset.retry];
-      if (j) { $("#url").value = j.url; analyze(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-    }
-    render();
+    try {
+      if (t.dataset.cancel) {
+        await api(`/api/jobs/${t.dataset.cancel}/cancel`, { method: "POST" });
+      } else if (t.dataset.remove) {
+        await api(`/api/jobs/${t.dataset.remove}`, { method: "DELETE" });
+      } else if (t.dataset.retry) {
+        const j = jobList.find((x) => x.id === t.dataset.retry);
+        if (j) { $("#url").value = j.url; analyze(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+        return;
+      }
+    } catch {}
+    poll();
   });
 
-  $("#clearDone").addEventListener("click", () => {
-    jobIds = jobIds.filter((id) => ["queued", "running", "processing"].includes(jobCache[id]?.status));
-    store.set("jobs", jobIds);
-    render();
+  $("#clearDone").addEventListener("click", async () => {
+    try { await api("/api/jobs/clear", { method: "POST" }); } catch {}
+    poll();
   });
 
   async function poll() {
     clearTimeout(pollTimer);
-    if (!jobIds.length) { render(); return; }
     try {
-      const list = await api(`/api/jobs?ids=${jobIds.join(",")}`);
-      const alive = new Set(list.map((j) => j.id));
+      const list = await api("/api/jobs");
       list.forEach((j) => {
-        const prev = jobCache[j.id];
-        jobCache[j.id] = j;
-        if (j.status === "done" && prev && prev.status !== "done") autoSave(j);
+        if (j.status === "done" && prevStatus[j.id] && prevStatus[j.id] !== "done") autoSave(j);
+        prevStatus[j.id] = j.status;
+        if (j.expires_in != null) deadlines[j.id] = Date.now() + j.expires_in * 1000;
       });
-      // jobs that vanished server-side (expired / restarted)
-      jobIds = jobIds.filter((id) => alive.has(id));
-      store.set("jobs", jobIds);
+      jobList = list;
       render();
     } catch {}
-    const busy = Object.values(jobCache).some((j) => ["queued", "running", "processing"].includes(j.status));
+    const busy = jobList.some((j) => ["queued", "running", "processing"].includes(j.status));
     pollTimer = setTimeout(poll, busy ? 1000 : 8000);
   }
+
+  // --- themes -------------------------------------------------------------
+  function setTheme(t, persist) {
+    document.documentElement.dataset.theme = t;
+    document.querySelectorAll(".theme-dot").forEach((b) => b.classList.toggle("on", b.dataset.theme === t));
+    if (persist) store.set("theme", t);
+  }
+  document.querySelectorAll(".theme-dot").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.theme, true)));
 
   // --- access key ---------------------------------------------------------
   $("#saveKey").addEventListener("click", () => {
@@ -278,6 +295,7 @@
   // --- boot ---------------------------------------------------------------
   (async () => {
     try { cfg = await (await fetch("/api/config")).json(); } catch {}
+    setTheme(store.get("theme", null) || cfg.default_theme || "blue", false);
     if (cfg.title) {
       document.title = cfg.title;
       const t = cfg.title;

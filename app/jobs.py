@@ -32,10 +32,12 @@ class Job:
     url: str
     opts: dict
     ip: str
+    owner: str = ""  # random per-browser id from the fdl_owner cookie
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     created: float = field(default_factory=time.time)
     started: float | None = None
     finished: float | None = None
+    expires_at: float | None = None
     status: str = "queued"  # queued | running | processing | done | error | cancelled
     progress: float | None = None
     speed: float | None = None
@@ -71,6 +73,8 @@ class Job:
             "item": self.item, "items": self.items, "message": self.message,
             "title": self.title, "thumbnail": self.thumbnail, "engine": self.engine,
             "error": self.error, "created": self.created, "finished": self.finished,
+            "expires_at": self.expires_at,
+            "expires_in": max(0.0, self.expires_at - time.time()) if self.expires_at else None,
             "mode": self.opts.get("mode"),
             "files": [{"name": Path(f).name, "path": f, "size": s} for f, s in self.files],
             "has_archive": bool(self.archive),
@@ -189,6 +193,13 @@ def _safe_name(s: str, default: str = "download") -> str:
     return (s[:120] or default)
 
 
+def expiry_seconds() -> float:
+    try:
+        return max(1.0, float(settings.get().get("file_expiry_minutes") or 10)) * 60
+    except (TypeError, ValueError):
+        return 600.0
+
+
 class JobManager:
     def __init__(self):
         self.jobs: dict[str, Job] = {}
@@ -199,8 +210,11 @@ class JobManager:
     def active_for_ip(self, ip: str) -> int:
         return sum(1 for j in self.jobs.values() if j.ip == ip and j.status in ("queued", "running", "processing"))
 
-    def submit(self, url: str, opts: dict, ip: str) -> Job:
-        job = Job(url=url, opts=opts, ip=ip)
+    def for_owner(self, owner: str) -> list[Job]:
+        return sorted((j for j in self.jobs.values() if j.owner == owner), key=lambda j: -j.created)
+
+    def submit(self, url: str, opts: dict, ip: str, owner: str) -> Job:
+        job = Job(url=url, opts=opts, ip=ip, owner=owner)
         self.jobs[job.id] = job
         self._kick()
         return job
@@ -243,6 +257,7 @@ class JobManager:
             job.log.append(f"[fdl] {e!r}")
         finally:
             job.finished = time.time()
+            job.expires_at = job.finished + expiry_seconds()
             job.speed = job.eta = None
             if ctx:
                 shutil.rmtree(ctx.tmpdir, ignore_errors=True)
@@ -275,6 +290,7 @@ class JobManager:
         job.cancelled = True
         if job.status == "queued":
             job.status, job.message, job.finished = "cancelled", "Cancelled.", time.time()
+            job.expires_at = job.finished + expiry_seconds()
         if job.proc is not None:
             _kill(job.proc)
 
@@ -289,12 +305,11 @@ class JobManager:
         for d in list(DOWNLOAD_DIR.iterdir()) + list(TMP_DIR.iterdir()):
             shutil.rmtree(d, ignore_errors=True) if d.is_dir() else d.unlink(missing_ok=True)
         while True:
-            await asyncio.sleep(300)
+            await asyncio.sleep(10)
             try:
-                hours = float(settings.get().get("retention_hours", 6))
-                cutoff = time.time() - hours * 3600
+                now = time.time()
                 for job in list(self.jobs.values()):
-                    if job.finished and job.finished < cutoff:
+                    if job.expires_at and job.expires_at <= now:
                         self.delete(job)
             except Exception as e:
                 print(f"[janitor] {e!r}", file=sys.stderr)

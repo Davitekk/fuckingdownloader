@@ -7,12 +7,18 @@
   <meta name="description" content="Just fucking download it. No ads, no subscriptions, no waiting.">
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
+  <script>try{var t=JSON.parse(localStorage.getItem("fdl:theme"));if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 </head>
 <body>
 <div class="wrap">
   <header class="brand">
     <h1 class="logo" id="logo">Fuckin<span>Downloader</span></h1>
     <p class="tag" id="tagline"><b>Just fucking download it.</b> No ads. No subscriptions. No waiting.</p>
+    <div class="themes" id="themes" aria-label="Theme">
+      <button type="button" class="theme-dot" data-theme="blue" style="--dot:#29c5ff" title="Blue"></button>
+      <button type="button" class="theme-dot" data-theme="green" style="--dot:#d7ff2f" title="Green"></button>
+      <button type="button" class="theme-dot" data-theme="red" style="--dot:#ff2a55" title="Red"></button>
+    </div>
   </header>
 
   <div id="closed" class="box hidden" style="text-align:center">The public downloader is switched off right now.</div>

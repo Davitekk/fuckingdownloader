@@ -7,6 +7,7 @@
   <title>FuckinDownloader admin</title>
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
+  <script>try{var t=JSON.parse(localStorage.getItem("fdl:theme"));if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 </head>
 <body>
 <div class="wrap wide">
@@ -39,15 +40,18 @@
         <label class="field"><span>Site title</span><input class="input" data-k="site_title"></label>
         <label class="field"><span>Tagline</span><input class="input" data-k="tagline"></label>
         <label class="field"><span>Access key (empty = open)</span><input class="input" data-k="public_password" type="password" autocomplete="new-password"></label>
+        <label class="field"><span>Default theme</span>
+          <select data-k="default_theme"><option value="blue">Blue</option><option value="green">Green</option><option value="red">Red</option></select></label>
       </div>
     </div>
     <div class="box section">
       <h3>Limits</h3>
-      <p>Keep your server alive. 0 = unlimited where it makes sense.</p>
+      <p>Keep your server alive. 0 = unlimited where it makes sense. Files are deleted that many minutes after a download finishes,
+        and each visitor only ever sees the downloads made from their own browser.</p>
       <div class="grid">
         <label class="field"><span>Parallel downloads</span><input class="input" type="number" min="1" data-k="max_concurrent"></label>
         <label class="field"><span>Active downloads per IP</span><input class="input" type="number" min="0" data-k="max_jobs_per_ip"></label>
-        <label class="field"><span>Keep files for (hours)</span><input class="input" type="number" min="0.1" step="0.5" data-k="retention_hours"></label>
+        <label class="field"><span>Delete files after (minutes)</span><input class="input" type="number" min="1" step="1" data-k="file_expiry_minutes"></label>
         <label class="field"><span>Max file size (MB)</span><input class="input" type="number" min="0" data-k="max_filesize_mb"></label>
         <label class="field"><span>Max playlist items</span><input class="input" type="number" min="0" data-k="max_playlist_items"></label>
       </div>

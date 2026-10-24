@@ -34,7 +34,10 @@ falling back to the next one if the first fails:
 - Live progress, speed, ETA, cancel, auto-save when done
 - Optional subtitles and SponsorBlock (cut sponsors/intros/outros)
 - **Admin panel** (hidden path + password): cookies per site (cookies.txt or JSON), Spotify API keys, proxy,
-  limits, access key for the public page, custom engines, all downloads with logs, one-click engine updates
+  limits, file expiry, default theme, access key for the public page, custom engines, all downloads with logs,
+  one-click engine updates
+- **Private by default**: visitors only see their own downloads, and files self-destruct after 10 minutes (configurable)
+- Blue, green and red themes
 - Built for public instances: per-IP limits, SSRF protection, auto-cleanup of old files, no accounts, no tracking
 - YouTube anti-bot measures handled: Deno JS runtime for yt-dlp + optional
   [bgutil PO token provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) sidecar
@@ -143,7 +146,7 @@ Audio comes from YouTube Music (matched by spotdl/the matcher), not from Spotify
 
 - **Admin, General, Access key** turns the public page into "people with the key only".
 - Tune **parallel downloads**, **active downloads per IP**, **max file size**, **max playlist items** and
-  **keep files for (hours)** to fit your disk and bandwidth.
+  **delete files after (minutes)** to fit your disk and bandwidth.
 - Your server IP is what sites see. If YouTube starts blocking you, keep the PO token sidecar on, add cookies,
   or set a proxy in the admin panel.
 - When something breaks, hit **Update** in the admin panel's System tab (or keep `AUTO_UPDATE=true`).
@@ -182,7 +185,9 @@ app/
   static/          the whole frontend (vanilla HTML/CSS/JS, no build step)
 ```
 
-Jobs live in memory; files live in `data/downloads/<job-id>/` until the retention period runs out.
+Jobs live in memory; files live in `data/downloads/<job-id>/` and are deleted when they expire
+(10 minutes after finishing by default, configurable in the admin panel). Each browser gets a random
+`fdl_owner` cookie and only sees, and can only download, its own files.
 A container restart clears old downloads.
 
 ## Legal

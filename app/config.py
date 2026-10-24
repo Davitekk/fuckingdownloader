@@ -57,12 +57,13 @@ COOKIE_SLOTS = {
 
 DEFAULT_SETTINGS = {
     "site_title": "FuckinDownloader",
+    "default_theme": "blue",
     "tagline": "Just fucking download it.",
     "public_enabled": True,
     "public_password": "",
     "max_concurrent": 3,
     "max_jobs_per_ip": 3,
-    "retention_hours": 6,
+    "file_expiry_minutes": 10,
     "max_filesize_mb": 0,
     "max_playlist_items": 300,
     "allow_private_urls": False,

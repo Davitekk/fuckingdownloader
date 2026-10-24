@@ -153,6 +153,15 @@ Audio comes from YouTube Music (matched by spotdl/the matcher), not from Spotify
 
 Needs Python 3.11+, ffmpeg and (for YouTube) [Deno](https://deno.com).
 
+On Windows there's a one-shot script that sets everything up in `.venv` and starts it on port 8090
+(it reads `ADMIN_PASSWORD` etc. from `.env`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run-local.ps1
+```
+
+On Linux/macOS:
+
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt

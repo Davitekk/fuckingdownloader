@@ -29,6 +29,7 @@
     try { data = await r.json(); } catch {}
     if (!r.ok) {
       if (r.status === 401 && cfg.access_key_required) $("#keybox").classList.remove("hidden");
+      if (r.status === 503) setFull(true);
       throw new Error((data && (data.error || data.detail)) || `HTTP ${r.status}`);
     }
     return data;
@@ -155,7 +156,7 @@
       err.textContent = e.message;
       err.classList.remove("hidden");
     } finally {
-      btn.disabled = false;
+      btn.disabled = !$("#fullBanner").classList.contains("hidden");
     }
   });
 
@@ -164,6 +165,7 @@
   let jobList = [];
   const prevStatus = {};
   const deadlines = {}; // job id -> local-clock expiry time, immune to server/client clock skew
+  const inUse = {}; // job id -> someone is downloading it right now, so it won't be deleted yet
   const openDetails = new Set();
   let pollTimer = null;
 
@@ -180,7 +182,8 @@
 
   function expiryText(id) {
     const left = (deadlines[id] - Date.now()) / 1000;
-    return left > 0 ? `Deletes in ${fmtTime(left)}` : "Expired";
+    if (left > 0) return `Deletes in ${fmtTime(left)}`;
+    return inUse[id] ? "Deletes when the download finishes" : "Expired";
   }
 
   function tickExpiry() {
@@ -269,12 +272,25 @@
         if (j.status === "done" && prevStatus[j.id] && prevStatus[j.id] !== "done") autoSave(j);
         prevStatus[j.id] = j.status;
         if (j.expires_in != null) deadlines[j.id] = Date.now() + j.expires_in * 1000;
+        inUse[j.id] = j.in_use;
       });
       jobList = list;
       render();
     } catch {}
     const busy = jobList.some((j) => ["queued", "running", "processing"].includes(j.status));
     pollTimer = setTimeout(poll, busy ? 1000 : 8000);
+  }
+
+  // --- storage quota ------------------------------------------------------
+  let fullTimer = null;
+  function setFull(full) {
+    $("#fullBanner").classList.toggle("hidden", !full);
+    $("#go").disabled = full;
+    clearTimeout(fullTimer);
+    fullTimer = setTimeout(checkFull, full ? 15000 : 60000);
+  }
+  async function checkFull() {
+    try { setFull(!!(await (await fetch("/api/config")).json()).storage_full); } catch { setFull(true); }
   }
 
   // --- themes -------------------------------------------------------------
@@ -296,6 +312,7 @@
   (async () => {
     try { cfg = await (await fetch("/api/config")).json(); } catch {}
     setTheme(store.get("theme", null) || cfg.default_theme || "blue", false);
+    setFull(!!cfg.storage_full);
     if (cfg.title) {
       document.title = cfg.title;
       const t = cfg.title;

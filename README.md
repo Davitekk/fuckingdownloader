@@ -8,7 +8,7 @@ No ads. No subscriptions. No "please wait 30 seconds". No popups. Paste a link, 
 
 ---
 
-A self-hosted, NoTube-style web downloader with a JDownloader-sized appetite. One Docker container, a public page
+A self-hosted, YouTube-downloader-style web app with a JDownloader-sized appetite. One Docker container, a public page
 anyone can use, and a password-protected admin panel only you can get into.
 
 Under the hood it glues together the best open-source downloaders and picks the right one for each link,
@@ -36,7 +36,10 @@ falling back to the next one if the first fails:
 - **Admin panel** (hidden path + password): cookies per site (cookies.txt or JSON), Spotify API keys, proxy,
   limits, file expiry, default theme, access key for the public page, custom engines, all downloads with logs,
   one-click engine updates
-- **Private by default**: visitors only see their own downloads, and files self-destruct after 10 minutes (configurable)
+- **Private by default**: visitors only see their own downloads, and files self-destruct after 10 minutes (configurable).
+  A file that's still being downloaded (slow connection) is never deleted mid-transfer, only once nobody is using it
+- **Storage quota** (default 20 GB): when downloads + temp files hit it, new downloads pause with a "server full"
+  notice until expired files free up space
 - Blue, green and red themes
 - Built for public instances: per-IP limits, SSRF protection, auto-cleanup of old files, no accounts, no tracking
 - YouTube anti-bot measures handled: Deno JS runtime for yt-dlp + optional
@@ -146,7 +149,7 @@ Audio comes from YouTube Music (matched by spotdl/the matcher), not from Spotify
 
 - **Admin, General, Access key** turns the public page into "people with the key only".
 - Tune **parallel downloads**, **active downloads per IP**, **max file size**, **max playlist items** and
-  **delete files after (minutes)** to fit your disk and bandwidth.
+  **delete files after (minutes)** and the **storage quota** to fit your disk and bandwidth.
 - Your server IP is what sites see. If YouTube starts blocking you, keep the PO token sidecar on, add cookies,
   or set a proxy in the admin panel.
 - When something breaks, hit **Update** in the admin panel's System tab (or keep `AUTO_UPDATE=true`).

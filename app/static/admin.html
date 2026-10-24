@@ -47,10 +47,13 @@
     <div class="box section">
       <h3>Limits</h3>
       <p>Keep your server alive. 0 = unlimited where it makes sense. Files are deleted that many minutes after a download finishes,
-        and each visitor only ever sees the downloads made from their own browser.</p>
+        and each visitor only ever sees the downloads made from their own browser. Files someone is still downloading
+        are kept until the transfer ends. When downloads + temp files reach the storage quota, new downloads are paused
+        (visitors see a "server full" notice) until expired files free up space.</p>
       <div class="grid">
         <label class="field"><span>Parallel downloads</span><input class="input" type="number" min="1" data-k="max_concurrent"></label>
         <label class="field"><span>Active downloads per IP</span><input class="input" type="number" min="0" data-k="max_jobs_per_ip"></label>
+        <label class="field"><span>Storage quota (GB, 0 = off)</span><input class="input" type="number" min="0" step="0.5" data-k="storage_quota_gb"></label>
         <label class="field"><span>Delete files after (minutes)</span><input class="input" type="number" min="1" step="1" data-k="file_expiry_minutes"></label>
         <label class="field"><span>Max file size (MB)</span><input class="input" type="number" min="0" data-k="max_filesize_mb"></label>
         <label class="field"><span>Max playlist items</span><input class="input" type="number" min="0" data-k="max_playlist_items"></label>

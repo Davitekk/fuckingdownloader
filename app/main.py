@@ -96,6 +96,24 @@ def require_public(req: Request):
             raise HTTPException(401, "Access key required.")
 
 
+class TrackedFileResponse(FileResponse):
+    """Counts open transfers on the job so expiry waits for slow downloads to finish."""
+
+    def __init__(self, job, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.job = job
+
+    async def __call__(self, scope, receive, send):
+        self.job.active_downloads += 1
+        try:
+            await super().__call__(scope, receive, send)
+        finally:  # also runs when the client disconnects mid-transfer
+            self.job.active_downloads -= 1
+
+
+FULL_MSG = "Server storage is full right now. Files get deleted every few minutes, try again soon."
+
+
 def _err(e: Exception, code: int = 400):
     return JSONResponse({"error": str(e)}, status_code=code)
 
@@ -198,7 +216,9 @@ def _clean_opts(o: Options, admin: bool) -> dict:
 @app.get("/api/config")
 async def public_config(req: Request):
     cfg = settings.get()
+    await manager.refresh_storage(max_age=5)
     return {
+        "storage_full": manager.storage_full(),
         "title": cfg["site_title"], "tagline": cfg["tagline"], "defaults": cfg["defaults"],
         "public_enabled": cfg["public_enabled"], "access_key_required": bool(cfg["public_password"]),
         "is_admin": is_admin(req), "max_playlist_items": cfg["max_playlist_items"], "version": VERSION,
@@ -237,6 +257,9 @@ async def api_create_job(body: JobIn, req: Request):
         url = await check_url(body.url, cfg["allow_private_urls"] or admin)
     except BlockedURL as e:
         return _err(e)
+    await manager.refresh_storage(max_age=5)
+    if manager.storage_full():
+        return _err(Exception(FULL_MSG), 503)
     if not admin and manager.active_for_ip(ip) >= int(cfg.get("max_jobs_per_ip") or 3):
         return _err(Exception("Chill, you already have downloads running. Wait for them to finish."), 429)
     job = manager.submit(url, _clean_opts(body.options, admin), ip, req.state.owner)
@@ -296,7 +319,7 @@ async def api_file(job_id: str, req: Request):
         p = job.outdir / job.files[0][0]
     if not p.exists():
         raise HTTPException(410, "File expired.")
-    return FileResponse(p, filename=p.name, media_type="application/octet-stream")
+    return TrackedFileResponse(job, p, filename=p.name, media_type="application/octet-stream")
 
 
 @app.get("/api/jobs/{job_id}/files/{idx}")
@@ -307,7 +330,7 @@ async def api_file_n(job_id: str, idx: int, req: Request):
     p = (job.outdir / job.files[idx][0]).resolve()
     if not p.is_relative_to(job.outdir.resolve()) or not p.exists():
         raise HTTPException(410, "File expired.")
-    return FileResponse(p, filename=p.name, media_type="application/octet-stream")
+    return TrackedFileResponse(job, p, filename=p.name, media_type="application/octet-stream")
 
 
 # --- admin api -----------------------------------------------------------
@@ -335,6 +358,8 @@ async def admin_put_settings(req: Request):
             patch[k] = max(0, int(patch[k] or 0))
     if "max_concurrent" in patch:
         patch["max_concurrent"] = max(1, patch["max_concurrent"])
+    if "storage_quota_gb" in patch:
+        patch["storage_quota_gb"] = max(0.0, float(patch["storage_quota_gb"] or 0))
     if "file_expiry_minutes" in patch:
         patch["file_expiry_minutes"] = min(max(1.0, float(patch["file_expiry_minutes"] or 10)), 60 * 24 * 7)
     if patch.get("default_theme") not in (None, "blue", "green", "red"):
@@ -346,6 +371,7 @@ async def admin_put_settings(req: Request):
             for e in patch["custom_engines"] if str(e.get("name", "")).strip()
         ]
     cfg = settings.update(patch)
+    await manager.refresh_storage()
     manager._kick()
     return {"ok": True, "cookie_counts": {k: cookie_utils.count(v) for k, v in cfg["cookies"].items()}}
 
@@ -397,11 +423,12 @@ async def admin_system():
         _version(["deno", "--version"], first=True),
     )
     du = shutil.disk_usage(DATA_DIR)
-    used = sum(f.stat().st_size for f in (DATA_DIR / "downloads").rglob("*") if f.is_file())
+    used = await manager.refresh_storage()
     return {
         "app": VERSION, "python": sys.version.split()[0],
         "versions": dict(zip(["yt-dlp", "gallery-dl", "spotdl", "ffmpeg", "deno"], vers)),
-        "disk": {"total": du.total, "free": du.free, "downloads": used},
+        "disk": {"total": du.total, "free": du.free, "downloads": used,
+                 "quota": manager.storage_status()["quota"], "full": manager.storage_full()},
         "jobs": {s: sum(1 for j in manager.jobs.values() if j.status == s)
                  for s in ("queued", "running", "processing", "done", "error", "cancelled")},
         "admin_path": ADMIN_PATH,

@@ -64,6 +64,7 @@ DEFAULT_SETTINGS = {
     "max_concurrent": 3,
     "max_jobs_per_ip": 3,
     "file_expiry_minutes": 10,
+    "storage_quota_gb": 20,  # 0 = no quota
     "max_filesize_mb": 0,
     "max_playlist_items": 300,
     "allow_private_urls": False,

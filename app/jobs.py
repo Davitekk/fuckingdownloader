@@ -56,6 +56,7 @@ class Job:
     log: deque = field(default_factory=lambda: deque(maxlen=300))
     cancelled: bool = False
     proc: object = None
+    active_downloads: int = 0  # files currently being streamed to someone
 
     @property
     def dir(self) -> Path:
@@ -75,6 +76,7 @@ class Job:
             "error": self.error, "created": self.created, "finished": self.finished,
             "expires_at": self.expires_at,
             "expires_in": max(0.0, self.expires_at - time.time()) if self.expires_at else None,
+            "in_use": self.active_downloads > 0,
             "mode": self.opts.get("mode"),
             "files": [{"name": Path(f).name, "path": f, "size": s} for f, s in self.files],
             "has_archive": bool(self.archive),
@@ -193,6 +195,25 @@ def _safe_name(s: str, default: str = "download") -> str:
     return (s[:120] or default)
 
 
+def _dir_size(*roots: Path) -> int:
+    total = 0
+    for root in roots:
+        for dirpath, _, names in os.walk(root):
+            for n in names:
+                try:
+                    total += os.lstat(os.path.join(dirpath, n)).st_size
+                except OSError:
+                    pass
+    return total
+
+
+def quota_bytes() -> int:
+    try:
+        return int(float(settings.get().get("storage_quota_gb") or 0) * 1024 ** 3)
+    except (TypeError, ValueError):
+        return 0
+
+
 def expiry_seconds() -> float:
     try:
         return max(1.0, float(settings.get().get("file_expiry_minutes") or 10)) * 60
@@ -205,6 +226,8 @@ class JobManager:
         self.jobs: dict[str, Job] = {}
         self.running: set[str] = set()
         self._tasks: set[asyncio.Task] = set()
+        self.storage_used = 0
+        self._storage_checked = 0.0
 
     # --- queue -----------------------------------------------------------
     def active_for_ip(self, ip: str) -> int:
@@ -219,10 +242,25 @@ class JobManager:
         self._kick()
         return job
 
+    # --- storage quota -------------------------------------------------
+    async def refresh_storage(self, max_age: float = 0) -> int:
+        if time.time() - self._storage_checked >= max_age:
+            self.storage_used = await asyncio.to_thread(_dir_size, DOWNLOAD_DIR, TMP_DIR)
+            self._storage_checked = time.time()
+        return self.storage_used
+
+    def storage_full(self) -> bool:
+        q = quota_bytes()
+        return bool(q) and self.storage_used >= q
+
+    def storage_status(self) -> dict:
+        return {"used": self.storage_used, "quota": quota_bytes(), "full": self.storage_full()}
+
     def _kick(self):
         limit = max(1, int(settings.get().get("max_concurrent", 3)))
+        full = self.storage_full()
         for job in sorted(self.jobs.values(), key=lambda j: j.created):
-            if len(self.running) >= limit:
+            if len(self.running) >= limit or full:
                 break
             if job.status == "queued" and job.id not in self.running:
                 self.running.add(job.id)
@@ -234,7 +272,7 @@ class JobManager:
         for job in sorted(self.jobs.values(), key=lambda j: j.created):
             if job.status == "queued" and job.id not in self.running:
                 pos += 1
-                job.message = f"In queue (#{pos})"
+                job.message = "Server storage is full, waiting for space..." if full else f"In queue (#{pos})"
 
     async def _run(self, job: Job):
         from .engines import run_chain  # avoid import cycle
@@ -262,6 +300,10 @@ class JobManager:
             if ctx:
                 shutil.rmtree(ctx.tmpdir, ignore_errors=True)
             self.running.discard(job.id)
+            try:
+                await self.refresh_storage()
+            except Exception:
+                pass
             self._kick()
 
     def _finalize(self, job: Job):
@@ -305,14 +347,18 @@ class JobManager:
         for d in list(DOWNLOAD_DIR.iterdir()) + list(TMP_DIR.iterdir()):
             shutil.rmtree(d, ignore_errors=True) if d.is_dir() else d.unlink(missing_ok=True)
         while True:
-            await asyncio.sleep(10)
             try:
                 now = time.time()
                 for job in list(self.jobs.values()):
-                    if job.expires_at and job.expires_at <= now:
+                    # never pull a file out from under someone still downloading it (slow connections);
+                    # it goes on the first sweep after the last transfer ends
+                    if job.expires_at and job.expires_at <= now and job.active_downloads == 0:
                         self.delete(job)
+                await self.refresh_storage()
+                self._kick()  # queued jobs may start again once space is freed
             except Exception as e:
                 print(f"[janitor] {e!r}", file=sys.stderr)
+            await asyncio.sleep(10)
 
 
 manager = JobManager()

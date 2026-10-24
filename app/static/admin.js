@@ -187,7 +187,7 @@
     $("#versions").innerHTML = [["FuckinDownloader", s.app], ["Python", s.python], ...Object.entries(s.versions)]
       .map(([k, v]) => `<b>${esc(k)}</b><span>${esc(v)}</span>`).join("");
     $("#disk").innerHTML = `
-      <b>Downloads</b><span>${fmtBytes(s.disk.downloads)}</span>
+      <b>Downloads</b><span>${fmtBytes(s.disk.downloads)}${s.disk.quota ? ` of ${fmtBytes(s.disk.quota)} quota${s.disk.full ? " (FULL, new downloads paused)" : ""}` : " (no quota)"}</span>
       <b>Free</b><span>${fmtBytes(s.disk.free)} of ${fmtBytes(s.disk.total)}</span>
       <b>Jobs</b><span>${Object.entries(s.jobs).map(([k, v]) => `${v} ${k}`).join(", ")}</span>
       <b>Admin path</b><span>${esc(s.admin_path)}</span>`;

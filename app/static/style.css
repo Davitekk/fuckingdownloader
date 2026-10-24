@@ -61,6 +61,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .theme-dot:hover { transform: scale(1.12); }
 .theme-dot.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--dot); }
 .expiry { font-variant-numeric: tabular-nums; }
+.banner { border-color: var(--warn); color: var(--warn); margin-bottom: 12px; text-align: center; font-weight: 600; }
+.banner small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
 .expiry.soon { color: var(--warn); }
 
 /* input */

@@ -117,6 +117,10 @@ age-restricted YouTube, X, members-only content. To fix that:
 
 For YouTube, export from a private/incognito window and close it right after, so YouTube doesn't rotate the cookies away.
 
+For TikTok, stay logged in after exporting (logging out kills the exported session), and use **Test login** next to the
+TikTok cookies to check that TikTok accepts them. Some IPs get sent to the login page even for public videos, so without a
+live login TikTok links fail.
+
 ### Spotify
 
 spotdl works out of the box but its built-in API keys are shared by every spotdl user on earth and get

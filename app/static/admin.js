@@ -82,6 +82,7 @@
           <b>${esc(label)}</b>
           <div class="row" style="margin:0">
             <span class="badge ${cfg.cookie_counts?.[k] ? "acc" : ""}" data-count="${k}">${cfg.cookie_counts?.[k] || 0} cookies</span>
+            ${k === "tiktok" ? `<button class="btn small" data-check="tiktok">Test login</button>` : ""}
             <label class="btn small">Upload<input type="file" accept=".txt,.json,text/plain,application/json" data-upload="${k}" hidden></label>
             <button class="btn small danger" data-clear="${k}">Clear</button>
           </div>
@@ -97,9 +98,19 @@
     $(`[data-cookie="${inp.dataset.upload}"]`).value = await inp.files[0].text();
     toast("Loaded. Don't forget to save.");
   });
-  $("#cookieSlots").addEventListener("click", (ev) => {
+  $("#cookieSlots").addEventListener("click", async (ev) => {
     const b = ev.target.closest("[data-clear]");
     if (b) $(`[data-cookie="${b.dataset.clear}"]`).value = "";
+    const c = ev.target.closest("[data-check]");
+    if (!c) return;
+    c.disabled = true;
+    try {
+      // test what's in the box, not what was last saved
+      await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(collect()) });
+      const r = await api(`/api/admin/cookies/check/${c.dataset.check}`, { method: "POST" });
+      toast(r.detail, r.state !== "ok");
+    } catch (e) { toast(e.message, true); }
+    c.disabled = false;
   });
 
   function engineRow(e = {}) {

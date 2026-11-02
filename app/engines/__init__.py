@@ -1,5 +1,6 @@
 """Picks which engine(s) handle a URL and falls through the chain until one
 of them actually produces a file."""
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -23,6 +24,16 @@ ENGINES = {
     "match": ("match", lambda ctx: music.download(ctx)),
     "sniff": ("sniffer", lambda ctx: sniff.download(ctx)),
 }
+
+
+# yt-dlp's advice is for people at a terminal; visitors here can't pass it flags
+_COOKIE_HINT = re.compile(r"[^.]*\buse --cookies-from-browser\b.*$", re.I | re.S)
+LOGIN_NOTE = "The login saved on this server for that site is missing or expired, so the admin needs to refresh its cookies."
+
+
+def friendly(msg: str) -> str:
+    stripped = _COOKIE_HINT.sub("", msg)
+    return f"{stripped.strip()} {LOGIN_NOTE}" if stripped != msg else msg
 
 
 def _host(url: str) -> str:
@@ -78,7 +89,7 @@ async def run_chain(ctx: Ctx):
         except Cancelled:
             raise
         except Exception as e:
-            errors.append((label, str(e) or e.__class__.__name__))
+            errors.append((label, friendly(str(e) or e.__class__.__name__)))
             ctx.log(f"[fdl] {label} failed: {e}")
             shutil.rmtree(ctx.outdir, ignore_errors=True)
             ctx.outdir.mkdir(parents=True, exist_ok=True)
@@ -116,7 +127,7 @@ async def analyze(url: str, opts: dict, cfg: dict) -> dict:
                 res["chain"] = chain
                 return res
             except Exception as e:
-                errors.append(str(e))
+                errors.append(friendly(str(e)))
         raise EngineError(errors[0] if errors else "Can't figure that link out.")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

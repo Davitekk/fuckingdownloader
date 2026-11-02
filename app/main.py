@@ -403,6 +403,30 @@ async def admin_clear():
     return {"ok": True, "removed": n}
 
 
+@app.post("/api/admin/cookies/check/tiktok", dependencies=admin_dep)
+async def admin_check_tiktok():
+    """Ask TikTok whether the saved cookies are a live login. Never returns account details."""
+    from curl_cffi.requests import AsyncSession
+
+    cfg = settings.get()
+    header = cookie_utils.header_for(cfg["cookies"], "tiktok.com")
+    if not header:
+        return {"state": "missing", "detail": "No unexpired TikTok cookies saved."}
+    try:
+        async with AsyncSession(impersonate="chrome", proxy=cfg.get("proxy") or None) as s:
+            r = await s.get("https://www.tiktok.com/passport/web/account/info/?aid=1459",
+                            headers={"Cookie": header}, allow_redirects=False, timeout=20)
+        body = r.json()
+    except Exception as e:
+        return {"state": "unknown", "detail": f"Couldn't reach TikTok: {e.__class__.__name__}"}
+    data = body.get("data") or {}
+    if data.get("name") == "session_expired" or data.get("error_code") == 13:
+        return {"state": "expired", "detail": "TikTok says this session expired. Export fresh cookies."}
+    if body.get("message") == "success":
+        return {"state": "ok", "detail": "TikTok accepts this login."}
+    return {"state": "unknown", "detail": f"Unexpected answer from TikTok (error {data.get('error_code')})."}
+
+
 async def _version(cmd: list[str], first: bool = False) -> str:
     try:
         p = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE,

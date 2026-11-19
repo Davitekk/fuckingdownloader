@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "FuckinDownloader – TikTok Cookie Export",
+  "version": "0.1.0",
+  "description": "Export your TikTok session to a local cookies.txt for FuckinDownloader.",
+  "permissions": [
+    "cookies",
+    "downloads"
+  ],
+  "optional_host_permissions": [
+    "https://*.tiktok.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

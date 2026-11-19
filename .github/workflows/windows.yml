@@ -1,0 +1,42 @@
+name: Windows desktop
+
+on:
+  pull_request:
+    paths: ['windows/**', 'browser-extension/**', 'LICENSE', '.github/workflows/windows.yml']
+  push:
+    paths: ['windows/**', 'browser-extension/**', 'LICENSE', '.github/workflows/windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: windows
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test ../browser-extension/cookies.test.mjs
+      - run: rustup update stable
+      - run: cargo fmt --check
+      - run: cargo test --locked
+      - run: cargo build --locked --release
+      - name: Package x64 installer
+        shell: pwsh
+        run: |
+          $compiler = [IO.Path]::Combine(${env:ProgramFiles(x86)}, 'Inno Setup 6', 'ISCC.exe')
+          if (!(Test-Path $compiler)) { throw 'Inno Setup 6 is required on the runner.' }
+          $env:FDL_VERSION = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages[0].version
+          & $compiler installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FuckinDownloader-Windows-x64
+          path: windows/dist/FuckinDownloader-Setup-x64.exe
+          if-no-files-found: error

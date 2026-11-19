@@ -211,3 +211,7 @@ All the heavy lifting is done by [yt-dlp](https://github.com/yt-dlp/yt-dlp), [ga
 ## License
 
 [MIT](LICENSE)
+
+## Windows desktop
+
+See the [Windows desktop guide](windows/README.md) for installation, engine setup, and building from source.
